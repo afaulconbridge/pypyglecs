@@ -4,12 +4,13 @@ import ecs
 class RenderSystem(ecs.models.System):
     system_manager = None
     game_window = None
-    def __init__(self, entity_manager):
+    def __init__(self, entity_manager, game_window):
         self.entity_manager = entity_manager
         self.batch = pyglet.graphics.Batch()
+        self.game_window = game_window
 
     def update(self, dt):
-        for entity, renderable in self.entity_manager.pairs_for_type(Renderable):
+        for entity, renderable in self.entity_manager.pairs_for_type(SpriteRenderable):
             locateable = self.entity_manager.component_for_entity(entity, Locateable)
             if self.game_window is not None:
                 #move it to the right location
@@ -20,6 +21,25 @@ class RenderSystem(ecs.models.System):
                 #ensure it is in the correct batch
                 renderable.sprite.batch = self.batch
                 #no need to draw it here, PyGlet will handle that
+            else:
+                print("trying to update a non game_window")
+        for entity, renderable in self.entity_manager.pairs_for_type(TextRenderable):
+            locateable = self.entity_manager.component_for_entity(entity, Locateable)
+            if self.game_window is not None:
+                #resize
+                target_font_size = (game_window.height*renderable.proportion_size)
+                if renderable.font_size != target_font_size:
+                    renderable.label = pyglet.text.Label("Hello, world", font_size = target_font_size,
+                        anchor_x='center', anchor_y='center')
+                    renderable.font_size = target_font_size
+
+                if renderable.label != None:
+                    #move it to the right location
+                    renderable.label.x = game_window.height*locateable.x
+                    renderable.label.y = game_window.height*locateable.y
+                    #ensure it is in the correct batch
+                    renderable.label.batch = self.batch
+                    #no need to draw it here, PyGlet will handle that
             else:
                 print("trying to update a non game_window")
 
@@ -75,44 +95,26 @@ class Controllable(ecs.models.Component):
     def __init__(self):
         pass
 
-class Renderable(ecs.models.Component):
+class SpriteRenderable(ecs.models.Component):
     def __init__(self,  filename, proportion_size):
         self.image = pyglet.resource.image(filename)
-        self.image.anchor_x = self.image.width // 2
-        self.image.anchor_y = self.image.height // 2
+        image.anchor_x = image.width // 2
+        image.anchor_y = image.height // 2
         self.proportion_size = proportion_size
         self.sprite = pyglet.sprite.Sprite(img=self.image)
 
-
-class Screen():
-    def __init__(self):
-        self.entity_manager = ecs.managers.EntityManager()
-        self.system_manager = ecs.managers.SystemManager(self.entity_manager)
-        self.key_handler = pyglet.window.key.KeyStateHandler()
-        self.render_system = RenderSystem(self.entity_manager)
-        self.system_manager.add_system(self.render_system)
-
-class ScreenManager():
-    screen = None
-
-    def __init__(self, game_window):
-        self.game_window = game_window
-
-    def draw(self):
-        if self.screen is not None:
-            self.screen.render_system.game_window = self.game_window
-            self.screen.render_system.draw()
-
-    def update(self, dt):
-        if self.screen is not None:
-            self.screen.render_system.game_window = self.game_window
-            self.screen.system_manager.update(dt)
+class TextRenderable(ecs.models.Component):
+    def __init__(self,  content, proportion_size):
+        self.content = content
+        self.label = None
+        self.proportion_size = proportion_size
+        self.font_size = None
 
 
 def create_player_ship_entity(entity_manager):
     entity = entity_manager.create_entity()
     entity_manager.add_component(entity, Locateable(0.05,0.5))
-    entity_manager.add_component(entity, Renderable("playerShip1_blue.png", 0.05))
+    entity_manager.add_component(entity, SpriteRenderable("playerShip1_blue.png", 0.05))
     entity_manager.add_component(entity, Moveable(0.0,0.0))
     entity_manager.add_component(entity, Controllable())
     return entity
@@ -120,19 +122,16 @@ def create_player_ship_entity(entity_manager):
 def create_enemy_ship_entity(entity_manager):
     entity = entity_manager.create_entity()
     entity_manager.add_component(entity, Locateable(0.95,0.5))
-    entity_manager.add_component(entity, Renderable("enemyBlack1.png", 0.05))
+    entity_manager.add_component(entity, SpriteRenderable("enemyBlack1.png", 0.05))
     entity_manager.add_component(entity, Moveable(-0.1, 0.0))
     return entity
 
-def create_game_screen():
-    screen = Screen()
-    screen.system_manager.add_system(ControlSystem(screen.entity_manager, screen.key_handler))
-    screen.system_manager.add_system(MoveSystem(screen.entity_manager))
 
-    create_player_ship_entity(screen.entity_manager)
-    create_enemy_ship_entity(screen.entity_manager)
-
-    return screen
+def create_start_button(entity_manager):
+    entity = entity_manager.create_entity()
+    entity_manager.add_component(entity, Locateable(0.5,0.5))
+    entity_manager.add_component(entity, TextRenderable("hello world", 0.25))
+    return entity
 
 if __name__=="__main__":
     #pyglet.resource.path = ['./']
@@ -140,19 +139,31 @@ if __name__=="__main__":
 
     game_window = pyglet.window.Window(800,600)
     fps_display = pyglet.clock.ClockDisplay()
+    key_handler = pyglet.window.key.KeyStateHandler()
+    game_window.push_handlers(key_handler)
 
-    screen_manager = ScreenManager(game_window)
-    game_screen = create_game_screen()
-    screen_manager.screen = game_screen
+    entity_manager = ecs.managers.EntityManager()
+    system_manager = ecs.managers.SystemManager(entity_manager)
 
-    #TODO only do this when a screen is "activated"
-    game_window.push_handlers(game_screen.key_handler)
+    render_system = RenderSystem(entity_manager, game_window)
+    system_manager.add_system(render_system)
+
+    control_system = ControlSystem(entity_manager, key_handler)
+    system_manager.add_system(control_system)
+
+    system_manager.add_system(MoveSystem(entity_manager))
 
     @game_window.event
     def on_draw():
         game_window.clear()
-        screen_manager.draw()
+        render_system.draw()
         fps_display.draw()
 
-    pyglet.clock.schedule_interval(screen_manager.update, 1/120.0)
+    pyglet.clock.schedule_interval(system_manager.update, 1/120.0)
+
+    #create initial screen
+    #create_player_ship_entity(entity_manager)
+    #create_enemy_ship_entity(entity_manager)
+    create_start_button(entity_manager)
+
     pyglet.app.run()
