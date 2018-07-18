@@ -64,22 +64,9 @@ class ControlSystem(ecs.models.System):
         self.key_handler = key_handler
 
     def update(self, dt):
-        for entity, controllable in self.entity_manager.pairs_for_type(Controllable):
-            moveable = self.entity_manager.component_for_entity(entity, Moveable)
-
-            if self.key_handler[pyglet.window.key.LEFT]:
-                moveable.dx = -0.2
-            elif self.key_handler[pyglet.window.key.RIGHT]:
-                moveable.dx =  0.2
-            else:
-                moveable.dx =  0.0
-
-            if self.key_handler[pyglet.window.key.UP]:
-                moveable.dy =  0.2
-            elif self.key_handler[pyglet.window.key.DOWN]:
-                moveable.dy = -0.2
-            else:
-                moveable.dy =  0.0
+        for entity, controllable in self.entity_manager.pairs_for_type(KeyHandleable):
+            keyhandleable = self.entity_manager.component_for_entity(entity, KeyHandleable)
+            keyhandleable.callback(keyhandleable, entity, self.entity_manager, self.key_handler)
 
 class Locateable(ecs.models.Component):
     def __init__(self, x, y):
@@ -91,15 +78,15 @@ class Moveable(ecs.models.Component):
         self.dx = dx
         self.dy = dy
 
-class Controllable(ecs.models.Component):
-    def __init__(self):
-        pass
+class KeyHandleable(ecs.models.Component):
+    def __init__(self, callback):
+        self.callback = callback
 
 class SpriteRenderable(ecs.models.Component):
     def __init__(self,  filename, proportion_size):
         self.image = pyglet.resource.image(filename)
-        image.anchor_x = image.width // 2
-        image.anchor_y = image.height // 2
+        self.image.anchor_x = self.image.width // 2
+        self.image.anchor_y = self.image.height // 2
         self.proportion_size = proportion_size
         self.sprite = pyglet.sprite.Sprite(img=self.image)
 
@@ -110,13 +97,28 @@ class TextRenderable(ecs.models.Component):
         self.proportion_size = proportion_size
         self.font_size = None
 
-
 def create_player_ship_entity(entity_manager):
     entity = entity_manager.create_entity()
     entity_manager.add_component(entity, Locateable(0.05,0.5))
     entity_manager.add_component(entity, SpriteRenderable("playerShip1_blue.png", 0.05))
     entity_manager.add_component(entity, Moveable(0.0,0.0))
-    entity_manager.add_component(entity, Controllable())
+    def player_callback(self, entity, entity_manager, key_handler):
+        moveable = entity_manager.component_for_entity(entity, Moveable)
+
+        if key_handler[pyglet.window.key.LEFT]:
+            moveable.dx = -0.2
+        elif key_handler[pyglet.window.key.RIGHT]:
+            moveable.dx =  0.2
+        else:
+            moveable.dx =  0.0
+
+        if key_handler[pyglet.window.key.UP]:
+            moveable.dy =  0.2
+        elif key_handler[pyglet.window.key.DOWN]:
+            moveable.dy = -0.2
+        else:
+            moveable.dy =  0.0
+    entity_manager.add_component(entity, KeyHandleable(player_callback))
     return entity
 
 def create_enemy_ship_entity(entity_manager):
@@ -126,11 +128,10 @@ def create_enemy_ship_entity(entity_manager):
     entity_manager.add_component(entity, Moveable(-0.1, 0.0))
     return entity
 
-
 def create_start_button(entity_manager):
     entity = entity_manager.create_entity()
     entity_manager.add_component(entity, Locateable(0.5,0.5))
-    entity_manager.add_component(entity, TextRenderable("hello world", 0.25))
+    entity_manager.add_component(entity, SpriteRenderable("blue_sliderRight.png", 0.05))
     return entity
 
 if __name__=="__main__":
@@ -162,8 +163,8 @@ if __name__=="__main__":
     pyglet.clock.schedule_interval(system_manager.update, 1/120.0)
 
     #create initial screen
-    #create_player_ship_entity(entity_manager)
-    #create_enemy_ship_entity(entity_manager)
-    create_start_button(entity_manager)
+    create_player_ship_entity(entity_manager)
+    create_enemy_ship_entity(entity_manager)
+    #create_start_button(entity_manager)
 
     pyglet.app.run()
